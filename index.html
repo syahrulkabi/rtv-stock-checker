@@ -8,9 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <title>RTV Stock Checker</title>
   <style>
-.product-dropdown[open] .product-thumb{
-  display:none;
-}
+
 .product-gallery{
   margin:10px;
   background:#fff;
@@ -86,24 +84,7 @@
   object-fit:contain;
   border-radius:10px;
 }
-  .product-thumb{
-  width:72px;
-  height:72px;
-  object-fit:contain;
-  background:#fff;
-  border:1px solid var(--line);
-  border-radius:12px;
-  flex-shrink:0;
-}
 
-.product-thumb-empty{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:9px;
-  color:var(--muted);
-  background:#10253a;
-}
 
 .product-summary{
   align-items:center;
@@ -421,18 +402,7 @@ function renderItems(items){
 
     return `
       <details class="product-dropdown">
-${item.photos && item.photos.length ? `
-  <img
-    class="product-thumb"
-    src="${PHOTO_API_URL}?path=${encodeURIComponent(item.photos[0])}"
-    alt="${escapeHtml(item.description)}"
-    loading="lazy"
-  >
-` : `
-  <div class="product-thumb product-thumb-empty">
-    No photo
-  </div>
-`}
+
         <summary class="product-summary">
 
           <div class="product-summary-main">
