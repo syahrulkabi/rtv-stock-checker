@@ -8,6 +8,115 @@
   <link rel="manifest" href="manifest.webmanifest">
   <title>RTV Stock Checker</title>
   <style>
+    .product-list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.product-dropdown{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:16px;
+  overflow:hidden;
+}
+
+.product-summary{
+  list-style:none;
+  cursor:pointer;
+  padding:16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.product-summary::-webkit-details-marker{
+  display:none;
+}
+
+.product-summary-main{
+  min-width:0;
+  flex:1;
+}
+
+.product-summary .item-code{
+  color:var(--accent);
+  font-size:12px;
+  font-weight:800;
+  margin-bottom:4px;
+}
+
+.product-summary .item-name{
+  font-size:16px;
+  font-weight:800;
+  line-height:1.25;
+}
+
+.summary-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:9px;
+  font-size:11px;
+  color:var(--muted);
+}
+
+.summary-meta span{
+  background:#10253a;
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:5px 8px;
+}
+
+.summary-stock{
+  color:var(--accent);
+}
+
+.dropdown-arrow{
+  font-size:24px;
+  color:var(--muted);
+  transition:transform .2s ease;
+  flex-shrink:0;
+}
+
+.product-dropdown[open] .dropdown-arrow{
+  transform:rotate(180deg);
+}
+
+.product-dropdown[open] .product-summary{
+  border-bottom:1px solid var(--line);
+}
+
+.product-details{
+  padding:0 0 4px;
+}
+
+.product-details .card{
+  margin:10px;
+}
+
+.product-details .recommend{
+  margin-top:10px;
+}
+
+@media(max-width:430px){
+  .product-summary{
+    padding:14px;
+  }
+
+  .product-summary .item-name{
+    font-size:15px;
+  }
+
+  .summary-meta{
+    font-size:10px;
+  }
+
+  .dropdown-arrow{
+    font-size:22px;
+  }
+}
     .results-header{
   margin:10px 2px;
   color:var(--muted);
@@ -116,7 +225,10 @@ function escapeHtml(s){
 
 function renderItems(items){
   if(!Array.isArray(items) || !items.length){
-    showEmpty("No products found","RTV did not return any matching products.");
+    showEmpty(
+      "No products found",
+      "RTV did not return any matching products."
+    );
     return;
   }
 
@@ -125,34 +237,9 @@ function renderItems(items){
       x => typeof x.onHand === "number" && x.onHand > 0
     );
 
-    const rec = recommended ? `
-      <section class="card recommend">
-        <div class="label">Recommended stock</div>
-        <div class="rec-main">
-          <div>
-            <div class="rec-code">${escapeHtml(recommended.code)}</div>
-            <div class="rec-name">
-              ${escapeHtml(recommended.name)} ·
-              ${escapeHtml(recommended.description)}
-            </div>
-          </div>
-          <div class="qty">
-            ${recommended.onHand} ${escapeHtml(item.uom || "PCS")}
-          </div>
-        </div>
-        <div class="reason">
-          First location with stock in the fixed priority:
-          ONLINE → E33 → DM → WH_SALES → KRMS → PTT.
-        </div>
-      </section>
-    ` : `
-      <section class="card">
-        <div class="empty">
-          <strong>No stock available</strong>
-          No selected location currently has positive on-hand quantity.
-        </div>
-      </section>
-    `;
+    const recommendedText = recommended
+      ? `${recommended.code} · ${recommended.onHand} ${item.uom || "PCS"}`
+      : "No stock";
 
     const locations = PRIORITY.map((code,i)=>{
       const x = (item.locations || []).find(v => v.code === code);
@@ -178,6 +265,7 @@ function renderItems(items){
             <div class="loc-code">
               ${escapeHtml(x?.code || code)}
             </div>
+
             <div class="loc-desc">
               ${escapeHtml(x?.name || "")}
               ${x?.name && x?.description ? " · " : ""}
@@ -193,62 +281,135 @@ function renderItems(items){
       `;
     }).join("");
 
+    const recommendedDetail = recommended ? `
+      <section class="card recommend">
+        <div class="label">Recommended stock</div>
+
+        <div class="rec-main">
+          <div>
+            <div class="rec-code">
+              ${escapeHtml(recommended.code)}
+            </div>
+
+            <div class="rec-name">
+              ${escapeHtml(recommended.name)}
+              ·
+              ${escapeHtml(recommended.description)}
+            </div>
+          </div>
+
+          <div class="qty">
+            ${recommended.onHand}
+            ${escapeHtml(item.uom || "PCS")}
+          </div>
+        </div>
+
+        <div class="reason">
+          First location with stock in the fixed priority:
+          ONLINE → E33 → DM → WH_SALES → KRMS → PTT.
+        </div>
+      </section>
+    ` : `
+      <section class="card">
+        <div class="empty">
+          <strong>No stock available</strong>
+          No selected location currently has positive on-hand quantity.
+        </div>
+      </section>
+    `;
+
     return `
-      <div class="result-number">
-        Product ${index + 1} of ${items.length}
-      </div>
+      <details class="product-dropdown">
 
-      <section class="card">
-        <div class="item-code">
-          ${escapeHtml(item.itemCode)}
-        </div>
+        <summary class="product-summary">
 
-        <div class="item-name">
-          ${escapeHtml(item.description)}
-        </div>
+          <div class="product-summary-main">
+            <div class="item-code">
+              ${escapeHtml(item.itemCode)}
+            </div>
 
-        <div class="meta">
-          <span>UOM: ${escapeHtml(item.uom || "PCS")}</span>
-          <span>Live RTV</span>
-        </div>
-      </section>
+            <div class="item-name">
+              ${escapeHtml(item.description)}
+            </div>
 
-      ${rec}
+            <div class="summary-meta">
+              <span>
+                UOM: ${escapeHtml(item.uom || "PCS")}
+              </span>
 
-      <section class="card">
-        <div class="section-title">Stock by location</div>
-        <div class="locations">${locations}</div>
-      </section>
-
-      <section class="card">
-        <div class="section-title">Prices</div>
-
-        <div class="prices">
-          <div class="price">
-            <div class="k">B</div>
-            <div class="v">${money(item.prices?.B)}</div>
+              <span class="summary-stock">
+                Recommended:
+                ${escapeHtml(recommendedText)}
+              </span>
+            </div>
           </div>
 
-          <div class="price">
-            <div class="k">C</div>
-            <div class="v">${money(item.prices?.C)}</div>
-          </div>
+          <div class="dropdown-arrow">⌄</div>
 
-          <div class="price">
-            <div class="k">Member</div>
-            <div class="v">${money(item.prices?.Member)}</div>
-          </div>
+        </summary>
+
+        <div class="product-details">
+
+          ${recommendedDetail}
+
+          <section class="card">
+            <div class="section-title">
+              Stock by location
+            </div>
+
+            <div class="locations">
+              ${locations}
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="section-title">
+              Prices
+            </div>
+
+            <div class="prices">
+
+              <div class="price">
+                <div class="k">B</div>
+                <div class="v">
+                  ${money(item.prices?.B)}
+                </div>
+              </div>
+
+              <div class="price">
+                <div class="k">C</div>
+                <div class="v">
+                  ${money(item.prices?.C)}
+                </div>
+              </div>
+
+              <div class="price">
+                <div class="k">Member</div>
+                <div class="v">
+                  ${money(item.prices?.Member)}
+                </div>
+              </div>
+
+            </div>
+          </section>
+
         </div>
-      </section>
+
+      </details>
     `;
   }).join("");
 
   $("result").innerHTML = `
     <div class="results-header">
-      <strong>${items.length} product${items.length === 1 ? "" : "s"} found</strong>
+      <strong>
+        ${items.length}
+        product${items.length === 1 ? "" : "s"} found
+      </strong>
     </div>
 
-    ${cards}
+    <div class="product-list">
+      ${cards}
+    </div>
 
     <section class="card toolbar">
       <div>
