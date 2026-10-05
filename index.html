@@ -8,17 +8,75 @@
   <link rel="manifest" href="manifest.webmanifest">
   <title>RTV Stock Checker</title>
   <style>
-  .product-photo-large{
+    
+.product-gallery{
   margin:10px;
-  padding:12px;
   background:#fff;
   border:1px solid var(--line);
   border-radius:16px;
+  overflow:hidden;
+}
+
+.gallery-track{
+  display:flex;
+  overflow-x:auto;
+  scroll-snap-type:x mandatory;
+  scroll-behavior:smooth;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+
+.gallery-track::-webkit-scrollbar{
+  display:none;
+}
+
+.gallery-slide{
+  min-width:100%;
+  height:360px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  scroll-snap-align:start;
+  background:#fff;
+  padding:10px;
+  box-sizing:border-box;
+}
+
+.gallery-slide img{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  display:block;
+  border-radius:10px;
+}
+
+.gallery-dots{
   display:flex;
   justify-content:center;
   align-items:center;
+  gap:6px;
+  padding:8px 0 2px;
+  background:#fff;
 }
 
+.gallery-dot{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:#b8c0c8;
+}
+
+.gallery-dot.active{
+  background:#20c7a5;
+}
+
+.gallery-hint{
+  text-align:center;
+  padding:4px 0 10px;
+  font-size:10px;
+  color:#777;
+  background:#fff;
+}
 .product-photo-large img{
   display:block;
   width:100%;
@@ -401,13 +459,33 @@ ${item.photo ? `
         </summary>
 
         <div class="product-details">
-        ${item.photo ? `
-  <div class="product-photo-large">
-    <img
-      src="${PHOTO_API_URL}?path=${encodeURIComponent(item.photo)}"
-      alt="${escapeHtml(item.description)}"
-      loading="lazy"
-    >
+${item.photos && item.photos.length ? `
+  <div class="product-gallery">
+
+    <div class="gallery-track">
+      ${item.photos.map((photo, photoIndex) => `
+        <div class="gallery-slide">
+          <img
+            src="${PHOTO_API_URL}?path=${encodeURIComponent(photo)}"
+            alt="${escapeHtml(item.description)} photo ${photoIndex + 1}"
+            loading="lazy"
+          >
+        </div>
+      `).join("")}
+    </div>
+
+    ${item.photos.length > 1 ? `
+      <div class="gallery-dots">
+        ${item.photos.map((_, photoIndex) => `
+          <span class="gallery-dot ${photoIndex === 0 ? "active" : ""}"></span>
+        `).join("")}
+      </div>
+
+      <div class="gallery-hint">
+        Swipe to view ${item.photos.length} photos
+      </div>
+    ` : ""}
+
   </div>
 ` : ""}
 
@@ -491,7 +569,25 @@ ${item.photo ? `
       </button>
     </section>
   `;
+document.querySelectorAll(".gallery-track").forEach(track => {
 
+  const dots = track.parentElement.querySelectorAll(".gallery-dot");
+
+  if (!dots.length) return;
+
+  track.addEventListener("scroll", () => {
+
+    const index = Math.round(
+      track.scrollLeft / track.clientWidth
+    );
+
+    dots.forEach((dot, i) => {
+      dot.classList.toggle("active", i === index);
+    });
+
+  });
+
+});
   $("connectionPill").textContent = "Live RTV";
 }
 function showEmpty(message="Search an item to begin.", detail=""){
