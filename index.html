@@ -361,9 +361,98 @@
       }
     }
 
+  
+    .auth-screen{
+      position:fixed;
+      inset:0;
+      z-index:100;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+      background:linear-gradient(180deg,#07111f 0%,#0a1625 100%);
+    }
+    .auth-box{
+      width:min(420px,100%);
+      background:rgba(14,29,47,.97);
+      border:1px solid var(--line);
+      border-radius:24px;
+      padding:24px;
+      box-shadow:0 18px 45px rgba(0,0,0,.35);
+      text-align:center;
+    }
+    .auth-logo{
+      width:58px;
+      height:58px;
+      margin:0 auto 14px;
+      border-radius:17px;
+      background:linear-gradient(135deg,var(--accent),#148e9e);
+      display:grid;
+      place-items:center;
+      font-weight:950;
+      color:#06151d;
+      font-size:18px;
+    }
+    .auth-title{
+      font-size:21px;
+      font-weight:900;
+      margin:0;
+    }
+    .auth-sub{
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.5;
+      margin:7px 0 18px;
+    }
+    .auth-input{
+      width:100%;
+      background:#091727;
+      border:1px solid #29415a;
+      color:var(--text);
+      border-radius:14px;
+      padding:14px 13px;
+      outline:none;
+      text-align:center;
+    }
+    .auth-input:focus{border-color:var(--accent)}
+    .auth-btn{
+      width:100%;
+      margin-top:10px;
+    }
+    .auth-error{
+      min-height:18px;
+      margin-top:9px;
+      color:#ff8f8f;
+      font-size:12px;
+    }
+    .app.auth-hidden{display:none!important}
+
   </style>
 </head>
 <body>
+
+  <div id="authScreen" class="auth-screen">
+    <div class="auth-box">
+      <div class="auth-logo">RTV</div>
+      <div class="auth-title">RTV Stock Checker</div>
+      <div class="auth-sub">Enter the employee password to continue.</div>
+      <form id="authForm">
+        <input
+          id="authPassword"
+          class="auth-input"
+          type="password"
+          autocomplete="current-password"
+          placeholder="Enter password"
+          required
+        >
+        <button class="btn primary auth-btn" id="authBtn" type="submit">
+          Unlock
+        </button>
+        <div id="authError" class="auth-error"></div>
+      </form>
+    </div>
+  </div>
+
 
   <a
     class="whatsapp-help"
@@ -375,7 +464,7 @@
     <span class="whatsapp-help-icon">💬</span>
   </a>
 
-<main class="app">
+<main class="app auth-hidden">
   <header class="top">
     <div class="brand">
       <div class="logo">RTV</div>
@@ -411,6 +500,78 @@
 const API_URL = "https://rtv-stock-api.syahrulkabi.workers.dev/api/item";
 const PHOTO_API_URL = "https://rtv-stock-api.syahrulkabi.workers.dev/api/photo";
 const PRIORITY = ["ONLINE","E33","DM","WH_SALES","KRMS","PTT"];
+
+
+const AUTH_URL = "https://rtv-stock-api.syahrulkabi.workers.dev/api/auth";
+let APP_TOKEN = sessionStorage.getItem("rtv_auth_token") || "";
+
+async function loginApp(password){
+  const response = await fetch(AUTH_URL,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({password})
+  });
+
+  const data = await response.json().catch(()=>({}));
+
+  if(!response.ok){
+    throw new Error(data.error || "Incorrect password.");
+  }
+
+  if(!data.token){
+    throw new Error("Login did not return an access token.");
+  }
+
+  APP_TOKEN = data.token;
+  sessionStorage.setItem("rtv_auth_token", APP_TOKEN);
+}
+
+function authHeaders(){
+  return APP_TOKEN
+    ? { Authorization: "Bearer " + APP_TOKEN }
+    : {};
+}
+
+function showApp(){
+  $("authScreen").classList.add("hidden");
+  $("authPassword").value = "";
+  $("authError").textContent = "";
+  document.querySelector(".app").classList.remove("auth-hidden");
+}
+
+function lockApp(){
+  APP_TOKEN = "";
+  sessionStorage.removeItem("rtv_auth_token");
+  document.querySelector(".app").classList.add("auth-hidden");
+  $("authScreen").classList.remove("hidden");
+  $("authPassword").focus();
+}
+
+async function unlockExistingSession(){
+  if(!APP_TOKEN){
+    $("authPassword").focus();
+    return;
+  }
+
+  try{
+    const response = await fetch(API_URL,{
+      method:"GET",
+      headers:authHeaders(),
+      cache:"no-store"
+    });
+
+    if(response.status === 401){
+      lockApp();
+      return;
+    }
+
+    showApp();
+  }catch{
+    // Keep the password screen visible if the session cannot be checked.
+    lockApp();
+  }
+}
+
 
 const $ = id => document.getElementById(id);
 const money = n => typeof n === "number"
@@ -554,7 +715,7 @@ ${item.photos && item.photos.length ? `
       ${item.photos.map((photo, photoIndex) => `
         <div class="gallery-slide">
           <img
-            src="${PHOTO_API_URL}?path=${encodeURIComponent(photo)}"
+            src="${PHOTO_API_URL}?path=${encodeURIComponent(photo)}&token=${encodeURIComponent(APP_TOKEN)}"
             alt="${escapeHtml(item.description)} photo ${photoIndex + 1}"
             loading="lazy"
           >
@@ -754,8 +915,14 @@ async function shareProduct(item, button){
     // when WhatsApp is selected from the native share sheet.
     if(item.photos && item.photos.length){
       try{
-        const photoUrl = PHOTO_API_URL + "?path=" + encodeURIComponent(item.photos[0]);
-        const response = await fetch(photoUrl, { cache: "no-store" });
+        const photoUrl =
+          PHOTO_API_URL +
+          "?path=" + encodeURIComponent(item.photos[0]) +
+          "&token=" + encodeURIComponent(APP_TOKEN);
+
+        const response = await fetch(photoUrl, {
+          cache: "no-store"
+        });
 
         if(response.ok){
           const blob = await response.blob();
@@ -814,9 +981,14 @@ async function searchItem(){
   try{
     const response=await fetch(API_URL+"?q="+encodeURIComponent(raw),{
       method:"GET",
+      headers:authHeaders(),
       cache:"no-store"
     });
     const data=await response.json().catch(()=>({}));
+    if(response.status === 401){
+      lockApp();
+      return;
+    }
     if(!response.ok) throw new Error(data.error || data.detail || "Unable to read RTV.");
     renderItems(data.items || []);
   }catch(err){
@@ -826,6 +998,36 @@ async function searchItem(){
     $("searchBtn").disabled=false;
   }
 }
+
+
+$("authForm").addEventListener("submit",async event=>{
+  event.preventDefault();
+
+  const password=$("authPassword").value;
+  const button=$("authBtn");
+  const error=$("authError");
+
+  if(!password) return;
+
+  button.disabled=true;
+  button.textContent="Unlocking…";
+  error.textContent="";
+
+  try{
+    await loginApp(password);
+    showApp();
+    showEmpty("Ready to search","Try <b>PLYPVV8</b>.");
+  }catch(err){
+    error.textContent=err.message || "Incorrect password.";
+    $("authPassword").focus();
+    $("authPassword").select();
+  }finally{
+    button.disabled=false;
+    button.textContent="Unlock";
+  }
+});
+
+unlockExistingSession();
 
 $("searchBtn").onclick=searchItem;
 $("search").addEventListener("keydown",e=>{if(e.key==="Enter")searchItem()});
