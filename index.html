@@ -84,10 +84,11 @@
     <div class="toolbar"><strong>Scan barcode</strong><button class="btn secondary small" id="closeScan">Close</button></div>
     <div class="scan-status" id="scanStatus">Point the camera at a barcode.</div>
     <video id="video" playsinline></video>
-    <div class="hint">Camera scanning uses your browser's barcode support. If unavailable, close this window and enter the code manually.</div>
+    <div class="hint">Use the rear camera and hold the barcode steady. If scanning fails, close this window and enter the code manually.</div>
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 const PRIORITY = ["ONLINE","E33","DM","WH_SALES","KRMS","PTT"];
 
@@ -169,33 +170,67 @@ $("searchBtn").onclick=searchItem;
 $("search").addEventListener("keydown",e=>{if(e.key==="Enter")searchItem()});
 showEmpty("Ready to search","Try <b>PLYPVV8</b>.");
 
-let stream=null, scanning=false, detector=null;
+let stream=null, scanning=false, scanCanvas=null, scanCtx=null, rafId=null;
+
 async function startScanner(){
   $("scanner").classList.remove("hidden");
-  $("scanStatus").textContent="Starting camera…";
+  $("scanStatus").textContent="Starting iPhone camera…";
   try{
-    if(!("BarcodeDetector" in window)){ $("scanStatus").textContent="This browser does not provide BarcodeDetector. Enter the item code manually."; return; }
-    detector=new BarcodeDetector({formats:["code_128","code_39","ean_13","ean_8","upc_a","upc_e","qr_code"]});
-    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}});
-    $("video").srcObject=stream; await $("video").play(); scanning=true; scanLoop();
-  }catch(err){ $("scanStatus").textContent="Camera permission was not available. Close this window and enter the code manually."; }
-}
-async function scanLoop(){
-  if(!scanning||!detector)return;
-  try{
-    const codes=await detector.detect($("video"));
-    if(codes.length && codes[0].rawValue){
-      $("search").value=codes[0].rawValue; stopScanner(); searchItem(); return;
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      throw new Error("Camera API unavailable");
     }
-  }catch(e){}
-  requestAnimationFrame(scanLoop);
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},
+      audio:false
+    });
+    $("video").srcObject=stream;
+    await $("video").play();
+
+    scanCanvas=document.createElement("canvas");
+    scanCtx=scanCanvas.getContext("2d",{willReadFrequently:true});
+    scanning=true;
+    $("scanStatus").textContent="Camera ready — point it at the barcode.";
+    scanLoop();
+  }catch(err){
+    $("scanStatus").textContent=
+      "Camera could not start. In iPhone Settings → Safari → Camera, allow this website, then try again.";
+    console.error(err);
+  }
 }
+
+function scanLoop(){
+  if(!scanning)return;
+  const video=$("video");
+  if(video.readyState>=2 && video.videoWidth>0){
+    scanCanvas.width=video.videoWidth;
+    scanCanvas.height=video.videoHeight;
+    scanCtx.drawImage(video,0,0,scanCanvas.width,scanCanvas.height);
+    const image=scanCtx.getImageData(0,0,scanCanvas.width,scanCanvas.height);
+    if(window.jsQR){
+      const code=jsQR(image.data,image.width,image.height,{inversionAttempts:"attemptBoth"});
+      if(code && code.data){
+        $("search").value=code.data;
+        $("scanStatus").textContent="Barcode detected: "+code.data;
+        setTimeout(()=>{stopScanner();searchItem();},250);
+        return;
+      }
+    }
+  }
+  rafId=requestAnimationFrame(scanLoop);
+}
+
 function stopScanner(){
   scanning=false;
+  if(rafId)cancelAnimationFrame(rafId);
+  rafId=null;
   if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
-  $("video").srcObject=null;$("scanner").classList.add("hidden");
+  $("video").srcObject=null;
+  $("scanner").classList.add("hidden");
 }
-$("scanBtn").onclick=startScanner;$("closeScan").onclick=stopScanner;
+
+$("scanBtn").onclick=startScanner;
+$("closeScan").onclick=stopScanner;
+
 if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 </script>
 </body>
