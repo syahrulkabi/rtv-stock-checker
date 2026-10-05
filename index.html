@@ -63,7 +63,7 @@
       <div class="logo">RTV</div>
       <div><h1>RTV Stock Checker</h1><div class="sub">Online / Branch 101</div></div>
     </div>
-    <div class="pill">Prototype</div>
+    <div class="pill" id="connectionPill">Live RTV</div>
   </header>
 
   <section class="card">
@@ -72,100 +72,120 @@
       <button class="btn primary" id="searchBtn">Search</button>
     </div>
     <button class="btn secondary scan" id="scanBtn">▣ Scan Barcode</button>
-    <div class="hint">Try <b>PLYPVV8</b> to see the sample RTV item.</div>
+    <div class="hint">Search a live RTV item code, SKU, barcode or item name.</div>
   </section>
 
   <section id="result"></section>
-  <div class="footer">Prototype data • Live RTV connection will be added separately</div>
+  <div class="footer">Live RTV data • A price is not displayed</div>
 </main>
 
 <div id="scanner" class="modal hidden">
   <div class="modalbox">
     <div class="toolbar"><strong>Scan barcode</strong><button class="btn secondary small" id="closeScan">Close</button></div>
-    <div class="scan-status" id="scanStatus">Point the camera at a barcode.</div>
+    <div class="scan-status" id="scanStatus">Point the camera at a QR code or supported barcode.</div>
     <video id="video" playsinline></video>
-    <div class="hint">Use the rear camera and hold the barcode steady. If scanning fails, close this window and enter the code manually.</div>
+    <div class="hint">Use the rear camera and hold the code steady. If scanning fails, close this window and enter the item code manually.</div>
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
+const API_URL = "https://rtv-stock-api.syahrulkabi.workers.dev/api/item";
 const PRIORITY = ["ONLINE","E33","DM","WH_SALES","KRMS","PTT"];
 
-const SAMPLE = {
-  itemCode:"PLYPVV8",
-  description:"PV AUDIO PV V8 POWER MIXER (WITH SIRIM & MCMC)",
-  uom:"PCS",
-  prices:{B:1280.00,C:1010.00,Member:1216.00},
-  locations:[
-    {code:"ONLINE",name:"Online Department Shelf",description:"Radiotronic Warehouse",onHand:2},
-    {code:"E33",name:"E33",description:"Radiotronic Warehouse",onHand:34},
-    {code:"DM",name:"DM",description:"Radiotronic Damai",onHand:0},
-    {code:"WH_SALES",name:"WH_SALES",description:"Radiotronic Warehouse - Warehouse Sales",onHand:null},
-    {code:"KRMS",name:"KRMS",description:"Eastcon Karamunsing",onHand:1},
-    {code:"PTT",name:"PTT",description:"Eastcon Putatan",onHand:1}
-  ]
-};
-
 const $ = id => document.getElementById(id);
-const money = n => new Intl.NumberFormat("en-MY",{style:"currency",currency:"MYR",minimumFractionDigits:2}).format(n);
+const money = n => typeof n === "number"
+  ? new Intl.NumberFormat("en-MY",{style:"currency",currency:"MYR",minimumFractionDigits:2}).format(n)
+  : "—";
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+}
 
 function render(item){
-  const recommended = item.locations.find(x => typeof x.onHand === "number" && x.onHand > 0);
+  const recommended = (item.locations || []).find(x => typeof x.onHand === "number" && x.onHand > 0);
+
   const rec = recommended ? `
     <section class="card recommend">
       <div class="label">Recommended stock</div>
       <div class="rec-main">
-        <div><div class="rec-code">${recommended.code}</div><div class="rec-name">${recommended.name} · ${recommended.description}</div></div>
-        <div class="qty">${recommended.onHand} ${item.uom}</div>
+        <div>
+          <div class="rec-code">${escapeHtml(recommended.code)}</div>
+          <div class="rec-name">${escapeHtml(recommended.name)} · ${escapeHtml(recommended.description)}</div>
+        </div>
+        <div class="qty">${recommended.onHand} ${escapeHtml(item.uom || "PCS")}</div>
       </div>
-      <div class="reason">Highest-priority location with stock, using the fixed order: ONLINE → E33 → DM → WH_SALES → KRMS → PTT.</div>
+      <div class="reason">First location with stock in the fixed priority: ONLINE → E33 → DM → WH_SALES → KRMS → PTT.</div>
     </section>` : `
-    <section class="card"><div class="empty"><strong>No stock available</strong>No selected location currently has positive on-hand quantity.</div></section>`;
+    <section class="card">
+      <div class="empty"><strong>No stock available</strong>No selected location currently has positive on-hand quantity.</div>
+    </section>`;
 
   const locations = PRIORITY.map((code,i)=>{
-    const x=item.locations.find(v=>v.code===code);
-    const value = x && typeof x.onHand === "number" ? `${x.onHand} ${item.uom}` : "—";
+    const x=(item.locations || []).find(v=>v.code===code);
+    const value = x && typeof x.onHand === "number" ? `${x.onHand} ${item.uom || "PCS"}` : "—";
     const cls = x && typeof x.onHand === "number" && x.onHand > 0 ? "ok" : "zero";
     const rec = recommended && recommended.code===code ? " recommended" : "";
     return `<div class="loc${rec}">
-      <div><div class="loc-code">${x?.code || code}</div><div class="loc-desc">${x?.name || ""}${x?.name && x?.description ? " · " : ""}${x?.description || ""}</div></div>
-      <div class="loc-right"><div class="stock ${cls}">${value}</div><div class="priority">Priority #${i+1}</div></div>
+      <div>
+        <div class="loc-code">${escapeHtml(x?.code || code)}</div>
+        <div class="loc-desc">${escapeHtml(x?.name || "")}${x?.name && x?.description ? " · " : ""}${escapeHtml(x?.description || "")}</div>
+      </div>
+      <div class="loc-right">
+        <div class="stock ${cls}">${value}</div>
+        <div class="priority">Priority #${i+1}</div>
+      </div>
     </div>`;
   }).join("");
 
   $("result").innerHTML = `
     <section class="card">
-      <div class="item-code">${item.itemCode}</div>
-      <div class="item-name">${item.description}</div>
-      <div class="meta"><span>UOM: ${item.uom}</span><span>Sample RTV data</span></div>
+      <div class="item-code">${escapeHtml(item.itemCode)}</div>
+      <div class="item-name">${escapeHtml(item.description)}</div>
+      <div class="meta"><span>UOM: ${escapeHtml(item.uom || "PCS")}</span><span>Live RTV</span></div>
     </section>
     ${rec}
     <section class="card"><div class="section-title">Stock by location</div><div class="locations">${locations}</div></section>
     <section class="card"><div class="section-title">Prices</div>
       <div class="prices">
-        <div class="price"><div class="k">B</div><div class="v">${money(item.prices.B)}</div></div>
-        <div class="price"><div class="k">C</div><div class="v">${money(item.prices.C)}</div></div>
-        <div class="price"><div class="k">Member</div><div class="v">${money(item.prices.Member)}</div></div>
+        <div class="price"><div class="k">B</div><div class="v">${money(item.prices?.B)}</div></div>
+        <div class="price"><div class="k">C</div><div class="v">${money(item.prices?.C)}</div></div>
+        <div class="price"><div class="k">Member</div><div class="v">${money(item.prices?.Member)}</div></div>
       </div>
     </section>
-    <section class="card toolbar"><div><div class="section-title" style="margin:0">Last checked</div><div style="font-size:12px;color:var(--muted)">Prototype data</div></div><button class="btn secondary small" onclick="searchItem()">↻ Refresh</button></section>`;
+    <section class="card toolbar">
+      <div><div class="section-title" style="margin:0">Last checked</div><div style="font-size:12px;color:var(--muted)">${new Date().toLocaleString("en-MY")}</div></div>
+      <button class="btn secondary small" onclick="searchItem()">↻ Refresh</button>
+    </section>`;
+  $("connectionPill").textContent="Live RTV";
 }
 
 function showEmpty(message="Search an item to begin.", detail=""){
   $("result").innerHTML=`<section class="card"><div class="empty"><strong>${message}</strong>${detail}</div></section>`;
 }
-function searchItem(){
-  const q=$("search").value.trim().toLowerCase();
-  if(!q){showEmpty();return}
-  showEmpty("Searching…");
-  setTimeout(()=>{
-    const hay=[SAMPLE.itemCode,SAMPLE.description].join(" ").toLowerCase();
-    if(hay.includes(q)) render(SAMPLE);
-    else showEmpty("No item found",`No prototype record matches “${escapeHtml($("search").value.trim())}”.`);
-  },180);
+
+async function searchItem(){
+  const raw=$("search").value.trim();
+  if(!raw){showEmpty();return}
+  showEmpty("Checking RTV…","Getting the latest stock and prices.");
+  $("searchBtn").disabled=true;
+  $("connectionPill").textContent="Checking…";
+  try{
+    const response=await fetch(API_URL+"?q="+encodeURIComponent(raw),{
+      method:"GET",
+      cache:"no-store"
+    });
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.error || data.detail || "Unable to read RTV.");
+    render(data);
+  }catch(err){
+    $("connectionPill").textContent="Live RTV";
+    showEmpty("Could not read RTV",escapeHtml(err.message || "Please try again."));
+  }finally{
+    $("searchBtn").disabled=false;
+  }
 }
-function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+
 $("searchBtn").onclick=searchItem;
 $("search").addEventListener("keydown",e=>{if(e.key==="Enter")searchItem()});
 showEmpty("Ready to search","Try <b>PLYPVV8</b>.");
