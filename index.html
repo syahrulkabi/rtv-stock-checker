@@ -8,6 +8,46 @@
   <link rel="manifest" href="manifest.webmanifest">
   <title>RTV Stock Checker</title>
   <style>
+  .product-photo-large{
+  margin:10px;
+  padding:12px;
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:16px;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+}
+
+.product-photo-large img{
+  display:block;
+  width:100%;
+  max-height:360px;
+  object-fit:contain;
+  border-radius:10px;
+}
+  .product-thumb{
+  width:72px;
+  height:72px;
+  object-fit:contain;
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:12px;
+  flex-shrink:0;
+}
+
+.product-thumb-empty{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:9px;
+  color:var(--muted);
+  background:#10253a;
+}
+
+.product-summary{
+  align-items:center;
+}
     .product-list{
   display:flex;
   flex-direction:column;
@@ -212,6 +252,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 const API_URL = "https://rtv-stock-api.syahrulkabi.workers.dev/api/item";
+const PHOTO_API_URL = "https://rtv-stock-api.syahrulkabi.workers.dev/api/photo";
 const PRIORITY = ["ONLINE","E33","DM","WH_SALES","KRMS","PTT"];
 
 const $ = id => document.getElementById(id);
@@ -320,7 +361,18 @@ function renderItems(items){
 
     return `
       <details class="product-dropdown">
-
+${item.photo ? `
+  <img
+    class="product-thumb"
+    src="${PHOTO_API_URL}?path=${encodeURIComponent(item.photo)}"
+    alt="${escapeHtml(item.description)}"
+    loading="lazy"
+  >
+` : `
+  <div class="product-thumb product-thumb-empty">
+    No photo
+  </div>
+`}
         <summary class="product-summary">
 
           <div class="product-summary-main">
@@ -349,6 +401,15 @@ function renderItems(items){
         </summary>
 
         <div class="product-details">
+        ${item.photo ? `
+  <div class="product-photo-large">
+    <img
+      src="${PHOTO_API_URL}?path=${encodeURIComponent(item.photo)}"
+      alt="${escapeHtml(item.description)}"
+      loading="lazy"
+    >
+  </div>
+` : ""}
 
           ${recommendedDetail}
 
