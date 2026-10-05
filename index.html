@@ -50,7 +50,7 @@
     .error{color:#ffb0b0}.hidden{display:none!important}
     .modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:grid;place-items:center;padding:18px;z-index:20}
     .modalbox{width:min(520px,100%);background:#0e1d2f;border:1px solid var(--line);border-radius:22px;padding:16px}
-    video{width:100%;border-radius:15px;background:#000;aspect-ratio:4/3;object-fit:cover}
+    #reader{width:100%;overflow:hidden;border-radius:15px;background:#000;margin-top:8px} #reader video{width:100%!important;border-radius:15px} #reader__scan_region{min-height:260px}
     .scan-status{font-size:12px;color:var(--muted);margin:9px 0}
     .footer{text-align:center;color:#64788d;font-size:10px;padding:5px}
     @media(max-width:430px){.app{padding:14px 10px 32px}.prices{grid-template-columns:1fr}.item-name{font-size:19px}.rec-main{align-items:center}}
@@ -83,12 +83,12 @@
   <div class="modalbox">
     <div class="toolbar"><strong>Scan barcode</strong><button class="btn secondary small" id="closeScan">Close</button></div>
     <div class="scan-status" id="scanStatus">Point the camera at a QR code or supported barcode.</div>
-    <video id="video" playsinline></video>
+    <div id="reader"></div>
     <div class="hint">Use the rear camera and hold the code steady. If scanning fails, close this window and enter the item code manually.</div>
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 const API_URL = "https://rtv-stock-api.syahrulkabi.workers.dev/api/item";
 const PRIORITY = ["ONLINE","E33","DM","WH_SALES","KRMS","PTT"];
@@ -190,66 +190,98 @@ $("searchBtn").onclick=searchItem;
 $("search").addEventListener("keydown",e=>{if(e.key==="Enter")searchItem()});
 showEmpty("Ready to search","Try <b>PLYPVV8</b>.");
 
-let stream=null, scanning=false, scanCanvas=null, scanCtx=null, rafId=null;
+let scanner=null, scanning=false;
 
 async function startScanner(){
   $("scanner").classList.remove("hidden");
   $("scanStatus").textContent="Starting iPhone camera…";
-  try{
-    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      throw new Error("Camera API unavailable");
-    }
-    stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},
-      audio:false
-    });
-    $("video").srcObject=stream;
-    await $("video").play();
 
-    scanCanvas=document.createElement("canvas");
-    scanCtx=scanCanvas.getContext("2d",{willReadFrequently:true});
+  try{
+    if(!window.Html5Qrcode){
+      throw new Error("Barcode scanner library could not load.");
+    }
+
     scanning=true;
+
+    // html5-qrcode supports common 1D barcodes used on product labels:
+    // Code 128, Code 39, Code 93, EAN-13, EAN-8, UPC-A, UPC-E and ITF.
+    const formats = [
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.CODE_93,
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.ITF
+    ];
+
+    scanner = new Html5Qrcode("reader", {
+      formatsToSupport: formats,
+      verbose: false
+    });
+
+    await scanner.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: { width: 280, height: 140 },
+        aspectRatio: 1.777778
+      },
+      (decodedText) => {
+        if(!scanning) return;
+
+        scanning=false;
+        $("search").value=decodedText;
+        $("scanStatus").textContent="Barcode detected: " + decodedText;
+
+        setTimeout(async ()=>{
+          await stopScanner(false);
+          searchItem();
+        },250);
+      },
+      () => {
+        // Ignore normal frame-by-frame "not found" messages.
+      }
+    );
+
     $("scanStatus").textContent="Camera ready — point it at the barcode.";
-    scanLoop();
   }catch(err){
+    scanning=false;
     $("scanStatus").textContent=
-      "Camera could not start. In iPhone Settings → Safari → Camera, allow this website, then try again.";
+      "Camera could not start. Allow camera access in iPhone Settings → Safari, then try again.";
     console.error(err);
   }
 }
 
-function scanLoop(){
-  if(!scanning)return;
-  const video=$("video");
-  if(video.readyState>=2 && video.videoWidth>0){
-    scanCanvas.width=video.videoWidth;
-    scanCanvas.height=video.videoHeight;
-    scanCtx.drawImage(video,0,0,scanCanvas.width,scanCanvas.height);
-    const image=scanCtx.getImageData(0,0,scanCanvas.width,scanCanvas.height);
-    if(window.jsQR){
-      const code=jsQR(image.data,image.width,image.height,{inversionAttempts:"attemptBoth"});
-      if(code && code.data){
-        $("search").value=code.data;
-        $("scanStatus").textContent="Barcode detected: "+code.data;
-        setTimeout(()=>{stopScanner();searchItem();},250);
-        return;
-      }
-    }
-  }
-  rafId=requestAnimationFrame(scanLoop);
-}
-
-function stopScanner(){
+async function stopScanner(hide=true){
   scanning=false;
-  if(rafId)cancelAnimationFrame(rafId);
-  rafId=null;
-  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
-  $("video").srcObject=null;
-  $("scanner").classList.add("hidden");
+
+  if(scanner){
+    try{
+      if(scanner.isScanning){
+        await scanner.stop();
+      }
+    }catch(err){
+      console.warn("Scanner stop:",err);
+    }
+
+    try{
+      await scanner.clear();
+    }catch(err){
+      console.warn("Scanner clear:",err);
+    }
+
+    scanner=null;
+  }
+
+  if(hide){
+    $("scanner").classList.add("hidden");
+  }
 }
 
-$("scanBtn").onclick=startScanner;
-$("closeScan").onclick=stopScanner;
+$("scanBtn").onclick=()=>startScanner();
+$("closeScan").onclick=()=>stopScanner(true);
 
 if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 </script>
