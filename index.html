@@ -419,10 +419,10 @@ function renderItems(items){
 
     return `
       <details class="product-dropdown">
-${item.photo ? `
+${item.photos && item.photos.length ? `
   <img
     class="product-thumb"
-    src="${PHOTO_API_URL}?path=${encodeURIComponent(item.photo)}"
+    src="${PHOTO_API_URL}?path=${encodeURIComponent(item.photos[0])}"
     alt="${escapeHtml(item.description)}"
     loading="lazy"
   >
